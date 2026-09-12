@@ -1,0 +1,15 @@
+{
+  "version": "glm-5.3-2026-09-12",
+  "currency": "USD",
+  "unit_tokens": 1000000,
+  "source": "https://docs.z.ai/guides/overview/pricing",
+  "note": "Frozen benchmark basis for the dim (dimcode 0.5.2) evaluation runs; not live provider billing. GLM-5.3 input $1.40/M, cached input $0.26/M, output $4.40/M. Cache storage was free in the 2026-08 snapshot; cache writes are priced as fresh input (conservative). reasoning_effort defaults to max and cannot be disabled; pricing does not vary by effort tier, output volume does.",
+  "models": {
+    "glm-5.3": {
+      "fresh_input": 1.40,
+      "cache_write": 1.40,
+      "cache_read": 0.26,
+      "output": 4.40
+    }
+  }
+}
