@@ -51,6 +51,13 @@ mkdir -p "${MOUNT_DIR}"
 cp -a "${BIN_DIR}/." "${MOUNT_DIR}/"
 "${MOUNT_DIR}/dimcode" --version
 
+# Pier builds a per-agent egress-proxy sidecar (squid) from ubuntu:24.04 when the
+# agent declares network_allowlist(); the runtime egress allowlist does not
+# include Docker Hub, so the base image must be present before trials. Same for
+# the apt-based build steps, which reach *.ubuntu.com (allowed).
+echo "[install] pre-pulling Pier egress-proxy base image (ubuntu:24.04)"
+docker pull -q ubuntu:24.04
+
 echo "[install] writing Harbor bind-mount overlay"
 cat > /work/dim-mount-overlay.yaml <<'YAML'
 services:
