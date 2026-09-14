@@ -13,7 +13,7 @@ set -euo pipefail
 
 DIMCODE_VERSION="0.5.2"
 MOUNT_DIR="/opt/dim-agent"
-HOST_DIMCODE_HOME="/opt/dim-eval-home"
+
 
 # The clean runtime ships no Node.js; the npm wrapper needs it. Install from
 # apt first and fall back to NodeSource when apt's node is too old or absent.
@@ -33,14 +33,15 @@ node --version
 echo "[install] npm install -g dimcode@${DIMCODE_VERSION}"
 npm install -g "dimcode@${DIMCODE_VERSION}"
 
-echo "[install] materializing linux-x64 binary (first run downloads payload)"
-export DIMCODE_HOME="${HOST_DIMCODE_HOME}"
-mkdir -p "${DIMCODE_HOME}"
-dimcode --version
-
-BIN_DIR="${DIMCODE_HOME}/binaries/dimcode-linux-x64/${DIMCODE_VERSION}/bin"
+# The platform payload installs as an optionalDependency under the npm global
+# tree; locate it via npm root -g (a first-run download cache is the fallback).
+NPM_GLOBAL_ROOT=$(npm root -g)
+BIN_DIR="${NPM_GLOBAL_ROOT}/dimcode/node_modules/dimcode-linux-x64/bin"
 if [ ! -x "${BIN_DIR}/dimcode" ]; then
-  echo "dimcode linux-x64 binary not found at ${BIN_DIR}" >&2
+  BIN_DIR="/opt/dim-eval-home/binaries/dimcode-linux-x64/${DIMCODE_VERSION}/bin"
+fi
+if [ ! -x "${BIN_DIR}/dimcode" ]; then
+  echo "dimcode linux-x64 binary not found under ${NPM_GLOBAL_ROOT}" >&2
   exit 1
 fi
 
