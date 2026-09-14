@@ -37,6 +37,7 @@ DIMCODE_HOME = "/tmp/dimcode-home"
 #: Pinned provider identity (must match dim_harbor_agent.py).
 PROVIDER_ID = "icecn"
 PROVIDER_BASE_URL = "https://icecn.qwenkimi.com/v1"
+PROVIDER_HOST = "icecn.qwenkimi.com"
 PROVIDER_ADAPTER = "openai"
 MODEL_ID = "glm-5.3"
 KEY_ENV = "ICECN_API_KEY"
@@ -95,6 +96,13 @@ class DimAgent(BaseInstalledAgent):
     def install_spec(self):
         """No build-time install: the binary arrives via the read-only bind mount."""
         return None
+
+    def network_allowlist(self):
+        """The CLI must reach the pinned gateway; the Runta egress proxy swaps
+        the stub credential for the real key on that host only."""
+        from pier.models.agent.network import NetworkAllowlist
+
+        return NetworkAllowlist(domains=[PROVIDER_HOST])
 
     @override
     def version(self) -> str | None:
