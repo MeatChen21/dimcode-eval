@@ -201,7 +201,13 @@ class DimAgent(BaseInstalledAgent):
                 f"--model {shlex.quote(MODEL_ID)} "
                 f'--api-key "${key_var}" >/dev/null; '
                 f"{DIM_BIN} provider switch {shlex.quote(PROVIDER_ID)} "
-                f"--model {shlex.quote(MODEL_ID)} >/dev/null"
+                f"--model {shlex.quote(MODEL_ID)} >/dev/null; "
+                # Inject reasoning capabilities into the generated model entry:
+                # without it, --reasoning-effort is silently dropped and the
+                # server-side default (max) exhausts the continuation budget.
+                f"python3 -c {shlex.quote(CAPABILITY_INJECTION)} "
+                f">{DIMCODE_HOME}/capinject.log 2>&1 "
+                f'|| {{ cat {DIMCODE_HOME}/capinject.log >&2; exit 1; }}'
             ),
             env=env,
         )
@@ -216,6 +222,7 @@ class DimAgent(BaseInstalledAgent):
             environment,
             command=(
                 f"{DIM_BIN} exec "
+                f"--reasoning-effort {shlex.quote(REASONING_EFFORT)} "
                 f"--trace={shlex.quote(TRACE_DIR)} "
                 f"{shlex.quote(instruction)} "
                 f">/logs/agent/dim-stdout.txt 2>/logs/agent/{STDERR_FILENAME}; "
