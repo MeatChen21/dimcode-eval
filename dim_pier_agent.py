@@ -142,6 +142,10 @@ class DimAgent(BaseInstalledAgent):
         env = {
             "DIMCODE_DISABLE_AUTOUPDATE": "1",
             "DIMCODE_HOME": DIMCODE_HOME,
+            # Pier containers do not get the Harbor CA overlay, and every egress
+            # TLS hop is terminated by the Runta proxy; without its CA the CLI's
+            # provider calls fail certificate validation.
+            "NODE_EXTRA_CA_CERTS": "/usr/local/share/ca-certificates/runta-egress.crt",
             **(getattr(self, "_extra_env", None) or {}),
         }
         key_var = env.get("DIM_EVAL_API_KEY_ENV") or api_key_env_var(provider)
