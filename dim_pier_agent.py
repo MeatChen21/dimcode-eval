@@ -169,18 +169,31 @@ class DimAgent(BaseInstalledAgent):
             env=env,
         )
 
-        await self.exec_as_agent(
-            environment,
-            command=(
-                f"{DIM_BIN} exec "
-                f"--reasoning-effort {shlex.quote(REASONING_EFFORT)} "
-                f"--trace={shlex.quote(TRACE_DIR)} "
-                f"{shlex.quote(instruction)} "
-                f">/logs/agent/dim-stdout.txt 2>/logs/agent/{STDERR_FILENAME}; "
-                f"rc=$?; cat /logs/agent/{STDERR_FILENAME} >&2; exit $rc"
-            ),
-            env=env,
-        )
+        # No pipe and a try/finally download: exec may raise on a nonzero exit,
+        # and the CLI's trace/stderr must still reach the host in that case.
+        try:
+            await self.exec_as_agent(
+                environment,
+                command=(
+                    f"{DIM_BIN} exec "
+                    f"--reasoning-effort {shlex.quote(REASONING_EFFORT)} "
+                    f"--trace={shlex.quote(TRACE_DIR)} "
+                    f"{shlex.quote(instruction)} "
+                    f">/logs/agent/dim-stdout.txt 2>/logs/agent/{STDERR_FILENAME}; "
+                    f"rc=$?; cat /logs/agent/{STDERR_FILENAME} >&2; exit $rc"
+                ),
+                env=env,
+            )
+        finally:
+            # Pier's default agent-log bind mounts are replaced wholesale by our
+            # --mounts-json (CLI mounts override docker.py's _default_log_mounts),
+            # so anything written under /logs/agent would die with the container.
+            # Pull the directory back to the host logs dir while the environment
+            # still exists; populate_context_post_run reads from there.
+            try:
+                await environment.download_dir("/logs/agent", self.logs_dir)
+            except Exception as exc:  # noqa: BLE001 - diagnostics must not mask the run result
+                self.logger.warning("Failed to download /logs/agent: %s", exc)
 
     @override
     def populate_context_post_run(self, context: AgentContext) -> None:
