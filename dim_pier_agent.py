@@ -142,7 +142,7 @@ class DimAgent(BaseInstalledAgent):
         env = {
             "DIMCODE_DISABLE_AUTOUPDATE": "1",
             "DIMCODE_HOME": DIMCODE_HOME,
-            **self.extra_env,
+            **(getattr(self, "_extra_env", None) or {}),
         }
         key_var = env.get("DIM_EVAL_API_KEY_ENV") or api_key_env_var(provider)
 
