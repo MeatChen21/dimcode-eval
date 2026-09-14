@@ -188,26 +188,21 @@ class DimAgent(BaseInstalledAgent):
         # Missing credentials otherwise surface as a bare "Failed to execute prompt"
         # on all tasks at once, which reads like a catastrophic regression rather
         # than a setup mistake, so check before running.
+        # The provider registry (stub key + injected reasoning capabilities) is
+        # pre-provisioned on the runtime host and bind-mounted read-only at
+        # /opt/dim-eval-home; copy it onto the writable layer so the CLI can
+        # keep its per-trial session state. Task containers may lack python3,
+        # so the sqlite capability injection runs host-side at install time.
         await self.exec_as_agent(
             environment,
             command=(
                 "set -eu; "
                 f'test -n "${{{key_var}:-}}" '
                 f'|| {{ echo "{key_var} is empty in the task environment" >&2; exit 1; }}; '
-                f"mkdir -p {DIMCODE_HOME} /logs/agent; "
-                f"{DIM_BIN} provider add {shlex.quote(PROVIDER_ID)} "
-                f"--base-url {shlex.quote(PROVIDER_BASE_URL)} "
-                f"--adapter {shlex.quote(PROVIDER_ADAPTER)} "
-                f"--model {shlex.quote(MODEL_ID)} "
-                f'--api-key "${key_var}" >/dev/null; '
-                f"{DIM_BIN} provider switch {shlex.quote(PROVIDER_ID)} "
-                f"--model {shlex.quote(MODEL_ID)} >/dev/null; "
-                # Inject reasoning capabilities into the generated model entry:
-                # without it, --reasoning-effort is silently dropped and the
-                # server-side default (max) exhausts the continuation budget.
-                f"python3 -c {shlex.quote(CAPABILITY_INJECTION)} "
-                f">{DIMCODE_HOME}/capinject.log 2>&1 "
-                f'|| {{ cat {DIMCODE_HOME}/capinject.log >&2; exit 1; }}'
+                f"rm -rf {DIMCODE_HOME}; cp -a /opt/dim-eval-home {DIMCODE_HOME}; "
+                "mkdir -p /logs/agent; "
+                f"{DIM_BIN} provider list 2>/dev/null | grep -q '^icecn[[:space:]]' "
+                f'|| {{ echo "icecn provider missing from the pre-provisioned home" >&2; exit 1; }}'
             ),
             env=env,
         )

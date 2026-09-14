@@ -57,7 +57,56 @@ services:
   main:
     volumes:
       - /opt/dim-agent:/opt/dim-agent:ro
+      - /opt/dim-eval-home:/opt/dim-eval-home:ro
 YAML
+
+# Pre-provision the provider registry inside a dedicated home: the stub key
+# (the egress proxy swaps it for the real one at request time), the model
+# registration, and the reasoning-capability sqlite injection. Task containers
+# may lack python3, so this runs host-side here; adapters copy the home onto
+# the writable layer per trial.
+PRESET_HOME="/opt/dim-eval-home"
+echo "[install] pre-provisioning provider registry in ${PRESET_HOME}"
+rm -rf "${PRESET_HOME}"
+mkdir -p "${PRESET_HOME}"
+export DIMCODE_HOME="${PRESET_HOME}"
+dimcode provider add icecn --api-key "${ICECN_API_KEY:-runta-secret-stub}" \
+  --base-url https://icecn.qwenkimi.com/v1 --model glm-5.3 --adapter openai >/dev/null
+dimcode provider switch icecn --model glm-5.3 >/dev/null
+
+python3 - <<'PYEOF'
+import json, sqlite3, time, sys
+db = sqlite3.connect('/opt/dim-eval-home/v2/dimcode.sqlite')
+row = db.execute("SELECT models FROM providers WHERE providerId='icecn'").fetchone()
+if row is None or not row[0]:
+    sys.exit('no provider row')
+models = json.loads(row[0])
+hit = False
+for m in models:
+    if m.get('modelId') != 'glm-5.3':
+        continue
+    hit = True
+    m.setdefault('capabilities', {})['reasoning'] = True
+    m['capabilities']['maxOutputTokens'] = 131072
+    m['capabilities']['contextWindow'] = 1000000
+    m.setdefault('metadata', {})['reasoning'] = {
+        'supported': True, 'defaultEnabled': True,
+        'mode': 'effort', 'effort': 'high',
+        'effortOptions': ['low', 'high', 'max'],
+    }
+    m['metadata']['maxTokens'] = 131072
+if not hit:
+    sys.exit('model entry not found')
+now = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime()) + '.000Z'
+db.execute(
+    "UPDATE providers SET models=?, modelsUpdatedAt=? WHERE providerId='icecn'",
+    (json.dumps(models), now),
+)
+db.commit()
+print('capabilities injected')
+PYEOF
+
+dimcode provider list | head -3
 
 echo "[install] adapters in place:"
 ls -la /work/harness/dim_harbor_agent.py /work/harness/dim_pier_agent.py
