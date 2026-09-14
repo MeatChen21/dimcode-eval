@@ -15,6 +15,21 @@ DIMCODE_VERSION="0.5.2"
 MOUNT_DIR="/opt/dim-agent"
 HOST_DIMCODE_HOME="/opt/dim-eval-home"
 
+# The clean runtime ships no Node.js; the npm wrapper needs it. Install from
+# apt first and fall back to NodeSource when apt's node is too old or absent.
+if ! command -v npm >/dev/null 2>&1; then
+  echo "[install] installing Node.js (npm not found)"
+  export DEBIAN_FRONTEND=noninteractive
+  if apt-get install -y -qq nodejs npm >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+    :
+  else
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >/dev/null 2>&1
+    apt-get install -y -qq nodejs >/dev/null
+  fi
+  command -v node || { echo "node installation failed" >&2; exit 1; }
+fi
+node --version
+
 echo "[install] npm install -g dimcode@${DIMCODE_VERSION}"
 npm install -g "dimcode@${DIMCODE_VERSION}"
 
