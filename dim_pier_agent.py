@@ -92,6 +92,10 @@ class DimAgent(BaseInstalledAgent):
     def name() -> str:
         return "dim"
 
+    def install_spec(self):
+        """No build-time install: the binary arrives via the read-only bind mount."""
+        return None
+
     @override
     def version(self) -> str | None:
         return "dimcode 0.5.2"
