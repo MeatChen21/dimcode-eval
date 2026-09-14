@@ -41,6 +41,40 @@ PROVIDER_ADAPTER = "openai"
 MODEL_ID = "glm-5.3"
 KEY_ENV = "ICECN_API_KEY"
 
+#: See dim_harbor_agent.py: GLM-5.3 defaults to effort "max" server-side and
+#: exhausts the 0.5.2 continuation budget; the evaluation pins effort "high"
+#: via the undocumented --reasoning-effort flag plus a sqlite capability
+#: injection (custom-provider entries are born reasoning:false).
+REASONING_EFFORT = "high"
+
+#: Single-quoted python program run inside the task container after
+#: `provider add` (must match dim_harbor_agent.py).
+CAPABILITY_INJECTION = (
+    "import json,sqlite3,time,sys\n"
+    "db=sqlite3.connect('" + DIMCODE_HOME + "/v2/dimcode.sqlite')\n"
+    "row=db.execute(\"SELECT models FROM providers WHERE providerId='"
+    + PROVIDER_ID + "'\").fetchone()\n"
+    "if row is None or not row[0]: sys.exit('no provider row')\n"
+    "models=json.loads(row[0])\n"
+    "hit=False\n"
+    "for m in models:\n"
+    "    if m.get('modelId')!='" + MODEL_ID + "': continue\n"
+    "    hit=True\n"
+    "    m.setdefault('capabilities',{})['reasoning']=True\n"
+    "    m['capabilities']['maxOutputTokens']=131072\n"
+    "    m['capabilities']['contextWindow']=1000000\n"
+    "    m.setdefault('metadata',{})['reasoning']={'supported':True,"
+    "'defaultEnabled':True,'mode':'effort','effort':'" + REASONING_EFFORT + "',"
+    "'effortOptions':['low','high','max']}\n"
+    "    m['metadata']['maxTokens']=131072\n"
+    "if not hit: sys.exit('model entry not found')\n"
+    "now=time.strftime('%Y-%m-%dT%H:%M:%S',time.gmtime())+'.000Z'\n"
+    "db.execute(\"UPDATE providers SET models=?,modelsUpdatedAt=? WHERE "
+    "providerId='" + PROVIDER_ID + "'\",(json.dumps(models),now))\n"
+    "db.commit()\n"
+    "print('capabilities injected')\n"
+)
+
 
 def api_key_env_var(provider: str) -> str:
     """Fallback name for the key's env var, e.g. icecn -> ICECN_API_KEY."""
@@ -124,7 +158,13 @@ class DimAgent(BaseInstalledAgent):
                 f"--model {shlex.quote(MODEL_ID)} "
                 f'--api-key "${key_var}" >/dev/null; '
                 f"{DIM_BIN} provider switch {shlex.quote(PROVIDER_ID)} "
-                f"--model {shlex.quote(MODEL_ID)} >/dev/null"
+                f"--model {shlex.quote(MODEL_ID)} >/dev/null; "
+                # Inject reasoning capabilities into the generated model entry:
+                # without it, --reasoning-effort is silently dropped and the
+                # server-side default (max) exhausts the continuation budget.
+                f"python3 -c {shlex.quote(CAPABILITY_INJECTION)} "
+                f">{DIMCODE_HOME}/capinject.log 2>&1 "
+                f'|| {{ cat {DIMCODE_HOME}/capinject.log >&2; exit 1; }}'
             ),
             env=env,
         )
@@ -133,6 +173,7 @@ class DimAgent(BaseInstalledAgent):
             environment,
             command=(
                 f"{DIM_BIN} exec "
+                f"--reasoning-effort {shlex.quote(REASONING_EFFORT)} "
                 f"--trace={shlex.quote(TRACE_DIR)} "
                 f"{shlex.quote(instruction)} "
                 f">/logs/agent/dim-stdout.txt 2>/logs/agent/{STDERR_FILENAME}; "

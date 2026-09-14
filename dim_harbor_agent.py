@@ -56,6 +56,47 @@ PROVIDER_ADAPTER = "openai"
 MODEL_ID = "glm-5.3"
 KEY_ENV = "ICECN_API_KEY"
 
+#: GLM-5.3 always reasons and defaults to effort "max" server-side, which
+#: exhausts the 0.5.2 continuation budget (output_truncated). The evaluation
+#: pins effort "high" per user decision: exec's undocumented --reasoning-effort
+#: flag plus a sqlite capability injection (custom-provider entries are born
+#: with reasoning:false and no effortOptions, which makes the flag a no-op).
+REASONING_EFFORT = "high"
+
+#: Single-quoted python program run inside the task container after
+#: `provider add`. Injects reasoning capabilities into the provider's model
+#: entry so buildHeadlessProviderInvocationConfig accepts the effort flag.
+#:
+#: 0.5.2 gates the flag on model.capabilities.reasoning === true and
+#: metadata.reasoning.effortOptions containing the effort; custom-provider
+#: entries are generated with reasoning:false. The models column must be
+#: rewritten with a bumped modelsUpdatedAt for the CLI to pick it up.
+CAPABILITY_INJECTION = (
+    "import json,sqlite3,time,sys\n"
+    "db=sqlite3.connect('" + DIMCODE_HOME + "/v2/dimcode.sqlite')\n"
+    "row=db.execute(\"SELECT models FROM providers WHERE providerId='"
+    + PROVIDER_ID + "'\").fetchone()\n"
+    "if row is None or not row[0]: sys.exit('no provider row')\n"
+    "models=json.loads(row[0])\n"
+    "hit=False\n"
+    "for m in models:\n"
+    "    if m.get('modelId')!='" + MODEL_ID + "': continue\n"
+    "    hit=True\n"
+    "    m.setdefault('capabilities',{})['reasoning']=True\n"
+    "    m['capabilities']['maxOutputTokens']=131072\n"
+    "    m['capabilities']['contextWindow']=1000000\n"
+    "    m.setdefault('metadata',{})['reasoning']={'supported':True,"
+    "'defaultEnabled':True,'mode':'effort','effort':'" + REASONING_EFFORT + "',"
+    "'effortOptions':['low','high','max']}\n"
+    "    m['metadata']['maxTokens']=131072\n"
+    "if not hit: sys.exit('model entry not found')\n"
+    "now=time.strftime('%Y-%m-%dT%H:%M:%S',time.gmtime())+'.000Z'\n"
+    "db.execute(\"UPDATE providers SET models=?,modelsUpdatedAt=? WHERE "
+    "providerId='" + PROVIDER_ID + "'\",(json.dumps(models),now))\n"
+    "db.commit()\n"
+    "print('capabilities injected')\n"
+)
+
 
 def api_key_env_var(provider: str) -> str:
     """Fallback name for the key's env var, e.g. icecn -> ICECN_API_KEY."""
