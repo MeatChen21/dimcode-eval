@@ -61,7 +61,7 @@ KEY_ENV = "ICECN_API_KEY"
 #: pins effort "high" per user decision: exec's undocumented --reasoning-effort
 #: flag plus a sqlite capability injection (custom-provider entries are born
 #: with reasoning:false and no effortOptions, which makes the flag a no-op).
-REASONING_EFFORT = "high"
+REASONING_EFFORT = "max"
 
 #: Single-quoted python program run inside the task container after
 #: `provider add`. Injects reasoning capabilities into the provider's model

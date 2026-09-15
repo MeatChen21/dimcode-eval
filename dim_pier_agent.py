@@ -46,7 +46,7 @@ KEY_ENV = "ICECN_API_KEY"
 #: exhausts the 0.5.2 continuation budget; the evaluation pins effort "high"
 #: via the undocumented --reasoning-effort flag plus a sqlite capability
 #: injection (custom-provider entries are born reasoning:false).
-REASONING_EFFORT = "high"
+REASONING_EFFORT = "max"
 
 #: Single-quoted python program run inside the task container after
 #: `provider add` (must match dim_harbor_agent.py).
